@@ -1,0 +1,76 @@
+import { test, expect } from '@playwright/test';
+test('home expanded/collapsed is one page, main content recenters, and navigation is real', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1050 }); await page.goto('/');
+  await expect(page.getByTestId('home-view')).toBeVisible(); await expect(page.getByTestId('classroom-view')).toHaveCount(0);
+  const expanded = await page.locator('.goal-composer').boundingBox();
+  await page.screenshot({ path: 'docs/evidence/home-expanded-functional.png', fullPage: true });
+  await page.getByRole('button', { name: '收合側邊欄' }).click();
+  const collapsed = await page.locator('.goal-composer').boundingBox();
+  expect(collapsed!.x + collapsed!.width / 2).toBeLessThan(expanded!.x + expanded!.width / 2 - 30);
+  await expect(page.getByRole('button', { name: '展開側邊欄' })).toHaveAttribute('aria-expanded', 'false');
+  await page.screenshot({ path: 'docs/evidence/home-collapsed-functional.png', fullPage: true });
+  await page.getByRole('button', { name: '我的學習', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '從第一份教材開始' })).toBeVisible();
+  await page.getByRole('button', { name: '本次紀錄' }).click();
+  await expect(page.getByText('你還沒開始本次學習。建立一堂課後，實際提問會出現在這裡。')).toBeVisible();
+  await page.getByRole('button', { name: '首頁', exact: true }).click();
+  await expect(page.getByLabel('學習目標', { exact: true })).toBeVisible();
+});
+test('goal composer attaches real material, transmits the goal, and duplicate clicks create once', async ({ page }) => {
+  await page.goto('/'); const requests: unknown[] = [];
+  page.on('request', r => { if (r.method() === 'POST' && r.url().endsWith('/api/materials')) requests.push(r.postDataJSON()); });
+  await page.getByLabel('學習目標', { exact: true }).fill('請先介紹光合作用需要哪些材料，讓我從基礎理解。');
+  const text = '植物透過光合作用利用光能，水與二氧化碳參與反應，形成有機物。\n葉綠素吸收光，這是一份自訂教材，並不是預先寫好的程式語言課程。';
+  await page.getByLabel('上傳教材').setInputFiles({ name: '生物筆記.md', mimeType: 'text/markdown', buffer: Buffer.from(text) });
+  await expect(page.getByText('生物筆記.md', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '建立我的課程' }).dblclick();
+  await expect(page.getByTestId('classroom-view')).toBeVisible();
+  expect(requests).toHaveLength(1); expect(requests[0]).toMatchObject({ name: '生物筆記.md', text, learningGoal: '請先介紹光合作用需要哪些材料，讓我從基礎理解。' });
+  await expect(page.locator('.learner-goal')).toContainText('光合作用');
+});
+test('sample prompts populate meaningful goal and material, and pasted material can replace it', async ({ page }) => {
+  await page.goto('/'); await page.getByRole('button', { name: '補好 JavaScript 基礎' }).click();
+  await expect(page.getByLabel('學習目標', { exact: true })).toHaveValue('用小例子帶我看懂變數、參數與回傳值。');
+  await expect(page.locator('.attached-material')).toContainText('TypeScript 官方手冊導讀');
+  await page.getByRole('button', { name: '貼上筆記', exact: true }).click();
+  await page.getByLabel('教材內容').fill('這是一份真正貼上的學習筆記，我想循序漸進地理解每個觀念。每次只學一小步，先解釋術語，再看看實際例子。');
+  await page.getByRole('button', { name: '加入教材' }).click();
+  await expect(page.locator('.attached-material')).toContainText('我的學習筆記');
+  await page.getByRole('button', { name: '建立我的課程' }).click();
+  await expect(page.getByTestId('classroom-view')).toBeVisible();
+});
+test('home pauses teaching and continue card resumes the same real lesson and cursor', async ({ page }) => {
+  await page.goto('/'); await page.getByRole('button', { name: /從零理解 TypeScript/ }).click();
+  await page.getByRole('button', { name: '開始這一小節', exact: true }).click();
+  await expect(page.getByTestId('narration')).not.toBeEmpty();
+  const beatId = await page.getByTestId('board-beat').getAttribute('data-beat-id');
+  await page.getByRole('button', { name: '學習首頁', exact: true }).click();
+  await expect(page.getByTestId('home-view')).toBeVisible();
+  await expect(page.locator('.continue-card')).toContainText('本次學習');
+  await page.locator('.continue-card').click();
+  await expect(page.getByTestId('board-beat')).toHaveAttribute('data-beat-id', beatId!);
+  const frozen = await page.getByTestId('narration').textContent();
+  await page.waitForTimeout(250); expect(await page.getByTestId('narration').textContent()).toBe(frozen);
+  await page.getByRole('button', { name: '接著剛才的位置' }).click();
+  await expect.poll(async () => (await page.getByTestId('narration').textContent())!.length).toBeGreaterThan(frozen!.length);
+});
+test('reviewing previous material does not create a new beat or advance the live step', async ({ page }) => {
+  await page.goto('/'); await page.getByRole('button', { name: /從零理解 TypeScript/ }).click();
+  await page.getByRole('button', { name: '開始這一小節' }).click(); await page.getByLabel('書寫速度').selectOption('12');
+  await page.getByRole('button', { name: '我懂了，下一步' }).click();
+  await expect(page.getByTestId('board-beat')).toContainText('STEP 2');
+  await page.getByRole('button', { name: '上一步', exact: true }).click();
+  await expect(page.getByTestId('board-beat')).toContainText('STEP 1');
+  await expect(page.getByText('回顧中 · 不會改變課程進度')).toBeVisible();
+  await page.getByRole('button', { name: '回到目前進度' }).click();
+  await expect(page.getByTestId('board-beat')).toContainText('STEP 2');
+});
+test('mobile home navigation opens/closes and composer remains within viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/');
+  await page.getByRole('button', { name: '展開側邊欄' }).click();
+  await expect(page.getByRole('button', { name: '關閉側邊欄' })).toBeVisible();
+  await page.getByRole('button', { name: '收合側邊欄' }).click();
+  await page.getByLabel('上傳教材').setInputFiles({ name: '1234567890123456789012345678901234567890.md', mimeType: 'text/markdown', buffer: Buffer.from('這是一份學習教材，需要至少四十個字，目的是驗證手機上的長檔名附件仍然可讀，不會造成整個畫面水平溢出。') });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'docs/evidence/home-mobile-functional.png', fullPage: true });
+});
