@@ -1,102 +1,185 @@
-# MAG 學習室 — Pi technical validation
+# MAG 學習室
 
-Small local slice: import real material → Pi plans small steps → constrained tool writes synchronized narration/board → interrupt with「這裡不懂」→ clarification → resume the exact original cursor → next step. Learner UI is Traditional Chinese. This is not a commercial platform.
+MAG 學習室是一個正在開發的個人 AI 學習網站：你帶來想學的教材、說明自己的目標，老師把內容拆成短小的步驟，在白板上一邊寫、一邊解釋。看到不懂的地方，可以直接在右側問「這裡不懂」，先弄清楚，再接著原來的位置學下去。
 
+它想解決的問題是：**讀文件太吃力，但一次收到很長的 AI 回答也很難吸收。** 因此，學習過程以小段講解、可暫停的白板和隨時提問為中心。第一份範例是給 JavaScript 基礎較弱的學習者使用的 TypeScript 入門教材；網站也能匯入自己的文字教材，並不是只把一門固定課程寫死在畫面裡。
 
-## UI revision status
+目前這份程式已串起「匯入 → 分步教學 → 提問 → 接續」的流程，適合先在自己的電腦試用。真正由 AI 理解內容、產生教學，需要接上既有授權的模型；不接模型也能用**離線互動測試**體驗操作。
 
-Home and classroom are now separate views. Home includes a goal composer with attached/pasted material, working sample prompts, collapsible navigation, and an actual current-session continue card. Returning home pauses teaching and preserves the checkpoint. Classroom focuses on the current step; previous-step review does not advance Pi. The teacher icon is explicitly static. Model/voice details are available through a compact status control.
+## 打開後怎麼用？
 
-**Visual-reference matching is blocked, not completed:** Library resolved the three requested Hyperknow/Muse image IDs, but image downloads were blocked by proxy HTTP 403, so their pixels were not inspected. This is a functional checkpoint using the existing MAG visual baseline, not a claimed faithful recreation. See [design QA status](design-qa.md).
+1. **在學習首頁準備課程。** 輸入目標，例如「我 JavaScript 不熟，想先理解 TypeScript 的型別」，再上傳或貼上教材。也可以直接選「從零理解 TypeScript」範例。
+2. **進入教室，開始一小節。** 左側白板逐步出現文字、程式碼或簡單流程圖；右側保留老師與提問區。可以調整書寫速度、暫停，讀完後再前往下一步。
+3. **不懂就打斷。** 點選白板內容，或按「這裡不懂，換個方式說」。原本的講解會先停下，問題會帶上當時看到的內容與位置。
+4. **釐清後接著學。** 按「接著剛才的位置」，接續原本未寫完的內容，不會把整段重播或直接跳到下一課。
+5. **暫時回首頁。** 系統會暫停講解，在同一次開啟的頁面中保留進度，之後可從繼續學習卡片回來。**重新整理頁面或重啟服務後不保留課程進度**，目前尚未接資料庫。
 
-## Run
+首頁負責「準備要學什麼」，教室負責「專心學眼前這一步」。側邊導覽可以收合，手機也能操作。
 
-Node **22.19+** (verified on 24.19), npm, a browser.
+## 現在有哪些功能？
+
+| 項目 | 目前狀態 |
+| --- | --- |
+| 匯入教材 | 支援 UTF-8 `.txt`、`.md` 與直接貼上文字；不支援 PDF、圖片、OCR 或網址抓取 |
+| 學習目標 | 與教材分開輸入，提供給老師安排教學，不會修改教材原文 |
+| TypeScript 範例 | 附有依官方手冊整理的繁體中文入門筆記與來源連結；不是官方翻譯 |
+| 逐步白板 | 支援文字、程式碼與簡單流程圖，講解和白板依同一個顯示進度推進 |
+| 上下文提問 | 可在當前位置中斷、補充說明，再接續原本內容；也可回看上一個步驟 |
+| 教材來源 | 可查看原文、行號、內容指紋與引用；使用者上傳內容會標示尚未外部查證 |
+| 語音 | 實驗性瀏覽器朗讀與單次語音輸入；實際可用性取決於瀏覽器與權限 |
+| 老師角色 | 目前是靜態圖示，沒有立體角色、動畫或即時影像 |
+
+**尚未實作全雙工即時語音**，也沒有逐字音訊與白板同步。帳號、多使用者、跨裝置進度與長期儲存都還沒做。這是本機試用版本，並非可以直接對外提供服務的完整產品。
+
+## 先在 Windows 跑起來（不需要模型金鑰）
+
+準備 Node.js **22.19 或更新版本**（包含 npm）與瀏覽器；本專案曾在 Node.js 24.19 驗證。取得此分支的原始碼或解壓縮 ZIP 後，在有 `package.json` 的資料夾開啟 **PowerShell**，執行：
+
+```powershell
+npm ci --cache "$env:LOCALAPPDATA\npm-cache"
+$env:MAG_MODE = "fixture"
+npm run dev
+```
+
+保持終端機開啟，在**同一台電腦**瀏覽 `http://127.0.0.1:5173`。畫面應顯示「離線互動測試」。選 TypeScript 範例、開始教學，再試試提問和接續。停止服務時，在終端機按 `Ctrl+C`。
+
+如果 PowerShell 說無法執行 `npm.ps1`，把指令中的 `npm` 改成 `npm.cmd` 即可，不需要修改系統執行原則。
+
+macOS／Linux 對應指令：
 
 ```sh
 npm ci
-npm run dev
-# http://127.0.0.1:5173 — LIVE Pi mode, no automatic mock fallback
-```
-
-No credential is needed to start the site or import materials. Starting live teaching needs an authorized model. To exercise the interaction without one:
-
-```sh
 MAG_MODE=fixture npm run dev
 ```
 
-The banner says **離線互動測試**. This uses the real Pi SDK agent/tool loop with an explicit deterministic **model fixture**. It quotes the uploaded material; it does not understand questions or prove teaching quality.
+### 「離線互動測試」和真正 AI 有什麼不同？
 
-```sh
-npm run build
-npm start                         # production assets, same API
-MAG_MODE=fixture PORT=5174 npm start  # separate offline preview
+- **離線模式（`fixture`）**：不呼叫模型，使用固定規則重播這次匯入的教材片段。可以測試白板、提問、暫停與接續，但不會真正理解你的問題，也不能用來評估教學品質。
+- **真實模型模式（`live`，預設）**：由模型閱讀教材、安排步驟、回答問題。需要可用的模型憑證；失敗時會顯示錯誤，**不會偷偷切成離線回答**。
+
+兩種模式都使用同一套 Pi 對話與工具執行流程，離線模式只替換模型輸出。截至目前，此環境沒有可用的真實模型憑證，因此已通過的互動驗證不代表真實 AI 教學已驗證。
+
+## 接上自己既有的模型
+
+模型憑證只交給後端，不放進網頁。雲端環境請使用受保護的 Secrets／環境變數設定；本機可執行 `Copy-Item .env.example .env`，再於自己的編輯器私下填寫 `.env`。這個檔案已被 Git 忽略，請勿提交、貼到聊天或放入 `VITE_*` 變數。
+
+以下是使用既有 Anthropic 授權的設定範例；金鑰請在安全設定中填入，不要照抄占位文字：
+
+| 變數 | 用途／範例 |
+| --- | --- |
+| `MAG_MODE` | 設成 `live`，啟用真實模型 |
+| `PI_PROVIDER` | 模型供應商，例如 `anthropic` |
+| `PI_MODEL` | 模型 ID，例如 `claude-sonnet-4-5`，須在 Pi 目錄內且你的帳號可用 |
+| `ANTHROPIC_API_KEY` | 你既有授權的供應商金鑰，只在後端私下設定 |
+
+也能使用 Pi 支援的其他供應商，例如 `PI_PROVIDER=openai` 搭配 `OPENAI_API_KEY` 與帳號可用的 `PI_MODEL`。已有 Pi 登入設定時，可以沿用 `~/.pi/agent/auth.json`，或以 `PI_AUTH_PATH` 指向既有設定；自訂模型目錄使用 `PI_MODELS_PATH`。
+
+如果先前在 PowerShell 設過離線模式，請先停止服務，再執行：
+
+```powershell
+$env:MAG_MODE = "live"
+npm run check:pi
+npm run dev
 ```
 
-Default bind is loopback. No public deployment is configured. Sessions/materials are in memory; restart or page reload starts a fresh learner session. Old sessions expire opportunistically on the next import after one hour; maximum 20 concurrent sessions. “換一份教材” disposes the previous Pi session. Intended for a single trusted local user, not internet hosting.
+`check:pi` 會在憑證可用時實際呼叫模型，確認課程規劃與白板工具能運作；一般模型用量費用仍適用。沒有可用模型時會回報原因並以狀態碼 `2` 結束。本專案不會替你建立帳號或訂閱。
 
-## Existing model setup (server side only)
+## Pi 在這個網站裡做什麼？
 
-In the **cloud environment's protected Secrets/environment settings**, set an already-authorized provider key. Do not put it in chat, source control, the browser or a `VITE_*` variable. No new subscription or account setup is required or performed.
+可以把 Pi 理解成「老師工作的執行核心」，不只是轉送一句話給模型的 API 包裝。它負責保存這堂課的對話、讓模型呼叫教學工具，以及在學習者打斷時停止當前生成。本專案採用官方 `@earendil-works/pi-coding-agent` SDK，鎖定版本 `1.0.2`。
 
-A supported catalog example:
+整個流程是：
 
-- Secret: `ANTHROPIC_API_KEY` (existing authorized value).
-- Non-secret settings: `PI_PROVIDER=anthropic`, `PI_MODEL=claude-sonnet-4-5`, `MAG_MODE=live`.
-- Restart the server, then `npm run check:pi` to verify real planning and board tool calls. This issues a model request when credentials are available; ordinary provider usage/billing applies.
+```text
+首頁：教材 + 學習目標
+    ↓
+後端：檢查教材、建立來源行號與學習狀態
+    ↓
+Pi：管理對話，讓模型規劃課程與呼叫教學工具
+    ├─ plan_lesson：安排有教材依據的小步驟
+    └─ board_beat：產生一小段講解與對應的白板內容
+    ↓
+教室：逐步顯示內容，保存暫停位置
+    ↓
+右側提問 → 停止原講解 → Pi 回應 → 接續原位置
+```
 
-Alternatively use an existing supported Pi provider, e.g. `OPENAI_API_KEY` with `PI_PROVIDER=openai` and its authorized `PI_MODEL` id. Pi's available-model catalog must contain the selected model. Existing Pi auth can be read via `PI_AUTH_PATH=/absolute/path/to/auth.json`; custom model setup via `PI_MODELS_PATH=/absolute/path/to/models.json`. Existing `~/.pi/agent/auth.json` is discovered if present. No login or persistent access was configured by this task.
+前端是 React + TypeScript，負責畫面與閱讀節奏；後端是 Node.js + Express，負責教材、Pi 與課程狀態。模型只能用上述兩個受限制的教學工具，不能執行教材裡的程式碼、任意讀寫檔案或操作終端機。
 
-For local development outside managed secrets, copy `.env.example` to ignored `.env` and fill it privately. The dev/start/check commands load it with Node's `--env-file-if-exists`. `.pi-local/` is ignored and holds local Pi metadata; auth values are never returned by the API or diagnostics. Server errors are sanitized.
+每個步驟與白板段落都必須帶上對得回教材原文的引用。這可以檢查「引用是否存在」，但不能保證模型的推論一定正確；真實教學品質仍需要接上模型後逐項檢查。使用者提供的教材也不會因此自動成為可信來源。
 
-**Current executor blocker:** Pi reported **0 available live models**. No live model request was made. The successful SDK/tool-loop checks used the explicitly labeled fixture, not live inference.
+## 程式碼放在哪裡？
 
-## Supported material import
+| 路徑 | 負責的部分 |
+| --- | --- |
+| `src/Home.tsx` | 學習首頁、目標、教材與繼續學習入口 |
+| `src/Classroom.tsx`、`src/BoardVisual.tsx` | 教室、白板與右側提問區 |
+| `src/useLearningRoom.ts` | 前端學習狀態、暫停位置與接續操作 |
+| `src/voice.tsx` | 實驗性瀏覽器語音輸入／朗讀 |
+| `server/pi.ts` | Pi 模型、對話與工具整合 |
+| `server/lesson.ts` | 課程進度、中斷、重試與重複操作保護 |
+| `server/material.ts` | 教材匯入、限制與來源資訊 |
+| `server/app.ts`、`server/index.ts` | API 與本機服務啟動 |
+| `shared/contracts.ts` | 前後端共用的資料格式與驗證規則 |
+| `server/fixture.ts` | 明確標示的離線模型替身 |
+| `samples/`、`tests/`、`docs/` | 範例教材、自動測試與詳細說明 |
 
-- Upload actual `.txt` / `.md` UTF-8 files, or paste text.
-- 40–40,000 characters, at most 64 KB UTF-8 and 800 lines.
-- Reject binary/invalid UTF-8, unsupported extension, empty and oversized input.
-- Included source-backed TypeScript sample for learners with weak JavaScript foundations.
-- No URL fetching, PDF/OCR, images or arbitrary file execution.
+Mentora 沒有被整套引入：它的白板與自身服務、資料格式綁定較深。目前只在 MIT 授權下沿用一個箭頭幾何函式，保留授權，其餘介面使用小型 React／SVG 實作。詳見[技術選擇、來源與重用說明](docs/reuse.md)（初次評估紀錄）。
 
-The “教材與來源” panel shows normalized line-numbered content and SHA-256. Every plan step and board beat requires exact quotes with valid line ranges. Uploaded sources remain “使用者提供；尚未外部查證”. All material is treated as untrusted data; model tools cannot execute it. Text and code render as text nodes; no raw HTML/SVG or arbitrary model coordinates. Flow drawings permit only 2–4 bounded labels and host-owned SVG geometry.
+## 建置與測試
 
-## Timing, interruption and voice
+一般檢查可在專案資料夾執行：
 
-The homepage learning goal is validated separately and sent to Pi without changing the source text, line numbers or fingerprint. A goal never substitutes for material.
-
-One Pi tool beat = one short narration plus one text/code/flow board object. Both render against the same Unicode character cursor; model context uses the same visible-board projection. Reading completes before “下一步” is enabled; no automatic next-step rush.
-
-On question/pause the client immediately freezes writing and cancels speech. The server awaits Pi abort, invalidates the generation, and rejects stale writes. It also handles cancellation racing Pi's asynchronous prompt preflight. Questions carry the selected board beat and displayed cursor. Clarification does not advance the course. Resume continues the original saved content rather than regenerating it or duplicating it. Subsequent teaching uses the same Pi conversation, including the clarification. Request UUID deduplication and revision checks protect repeated actions. Errors remain visible and retryable; failed live generation never quietly switches to fixtures.
-
-Voice is a separate **experimental browser bridge**, not a Pi realtime audio model:
-- Opt-in SpeechSynthesis playback; cancel on pause/question/new material.
-- Feature-detected SpeechRecognition with `zh-TW`, one explicit microphone capture, one final transcript → the same contextual question endpoint. Teaching is paused before capture to avoid echo; permission/network errors fall back to text.
-- Browser vendors may process recognition audio remotely. No additional voice provider account is configured.
-- **Not full-duplex realtime voice. Not word-level audio/board synchronization.** Text drives the board; speech plays independently. No real microphone/audio service was available for verification. Browser API doubles test the bridge only.
-
-## Validation
-
-```sh
+```powershell
 npm run typecheck
 npm run lint
 npm test
 npm run build
-npm run test:browser   # Chromium at /usr/bin/chromium, or set CHROMIUM_PATH
-npm run check:pi       # live; exits 2 when no credentials are available
-MAG_MODE=fixture npm run check:pi  # real Pi loop, mocked model output
 ```
 
-Playwright starts an isolated fixture server at 5174 (uses an existing one outside CI). It checks real browser interaction, UTF-8 upload, source inspection, progressive text, interruption/clarification/resume, mobile layout, literal markup, transport failure, voice bridge with mocked browser audio, and code/SVG rendering with an injected visual fixture. PNG evidence lives in `docs/evidence/`. See [validation report](docs/validation.md) for the final executed results and boundaries, and [reuse decision](docs/reuse.md) for upstream source/license details.
+要確認離線的 Pi 工具流程：
 
-## Main files
+```powershell
+$env:MAG_MODE = "fixture"
+npm run check:pi
+```
 
-- `server/pi.ts`: official Pi SDK/session/tool integration and isolated resources.
-- `server/lesson.ts`: presentation checkpoints, cancellation, retries and idempotent actions.
-- `server/material.ts`, `samples/typescript-intro.md`: real import, provenance and source-backed sample.
-- `server/app.ts`, `server/index.ts`: same-origin local API and dev/production startup.
-- `shared/contracts.ts`: bounded schemas and shared visible-content projection.
-- `src/Home.tsx`, `src/Classroom.tsx`, `src/useLearningRoom.ts`, `src/ModeStatus.tsx`, `src/BoardVisual.tsx`, `src/main.tsx`, `src/style.css`, `src/voice.tsx`, `src/arrow-head.ts`: learner UI, board, voice bridge and attributed geometry.
-- `server/fixture.ts`, `tests/`, `scripts/check-pi.ts`: explicit offline fixture and verification.
+瀏覽器測試使用 Playwright。Linux 環境預設尋找 `/usr/bin/chromium`，可直接執行 `npm run test:browser`。**Windows 需先在另一個 PowerShell 終端啟動離線測試服務**，因為測試設定裡的自動啟動命令使用 Unix 語法：
 
-Deferred: persistence/auth/multiuser, arbitrary media, live teaching-quality evaluation, full realtime voice/precise audio alignment and dimensional avatar. None blocks the core text validation.
+```powershell
+# 終端 A：保持這個服務執行
+$env:MAG_MODE = "fixture"
+$env:PORT = "5174"
+npm run dev
+```
+
+```powershell
+# 終端 B：CHROMIUM_PATH 改成自己已安裝的 Chrome／Chromium 實際路徑
+$env:CHROMIUM_PATH = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+npm run test:browser
+```
+
+此方式供一般本機使用，請勿設定 `CI` 環境變數；測試才會沿用已開啟的服務。測試包括教材匯入、來源查看、逐步書寫、中斷與接續、重複操作及錯誤狀態。語音測試使用模擬的瀏覽器介面，並不代表實體麥克風或播放服務已驗證。完整紀錄見[驗證報告](docs/validation.md)。
+
+要在 Windows 使用建置後的網頁：
+
+```powershell
+npm run build
+$env:NODE_ENV = "production"
+$env:MAG_MODE = "fixture"
+node --env-file-if-exists=.env --import tsx server/index.ts
+```
+
+macOS／Linux 可用 `MAG_MODE=fixture npm start`。`npm start` 使用 Unix 環境變數語法，Windows 請使用上面的完整指令。回到開發模式前，先停止服務並移除 PowerShell 的設定：`Remove-Item Env:NODE_ENV -ErrorAction SilentlyContinue`。
+
+## 常見問題
+
+- **網頁開不了：** 確認終端機仍在執行、使用的是它印出的位址。`127.0.0.1` 只指向執行服務的那台電腦，雲端環境的本機位址不等於公開預覽連結。本專案未設定公開部署。
+- **連接埠已被使用：** 在 PowerShell 設 `$env:PORT = "5174"` 再啟動，並改開對應位址。瀏覽器測試固定使用 `5174`。
+- **教材無法上傳：** 目前僅接受 UTF-8 `.txt`／`.md`，或直接貼文字；長度須為 40–40,000 字元，最多 64 KB、800 行。請不要把 PDF 改副檔名當成文字檔。
+- **老師只重述原文，沒有回答問題：** 查看是否處於「離線互動測試」。這是預期行為，真正理解問題需要切換 `live` 並設定可用模型。
+- **顯示沒有可用的 Pi 模型：** 檢查後端憑證、供應商與模型 ID，重啟後執行 `npm run check:pi`。即使沒有模型，也能啟動網站、匯入教材或使用離線模式。
+- **重新整理後課程不見：** 目前只有記憶體中的暫存狀態，沒有持久化進度；回首頁後繼續與重新整理頁面是不同情況。
+- **語音按鈕不能用或沒聲音：** 瀏覽器可能不支援、未授權麥克風，或語音服務不可用。可繼續使用文字提問；語音辨識也可能由瀏覽器廠商的遠端服務處理。
+
+介面已實作首頁／教室分離與互動流程，但先前參考圖的下載受阻，尚未完成逐圖視覺比對，不能視為已忠實還原參考設計。詳見[設計檢查狀態](design-qa.md)。只想快速啟動，也可以看較短的 [Windows 操作指南](docs/WINDOWS-QUICKSTART.md)。
