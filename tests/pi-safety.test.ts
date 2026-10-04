@@ -1,0 +1,36 @@
+import { expect, it, vi } from 'vitest';
+import type { AgentSession } from '@earendil-works/pi-coding-agent';
+import { randomUUID } from 'node:crypto';
+import { createRuntime, createTeacher } from '../server/pi';
+import { sampleMaterial } from '../server/material';
+import { Lesson } from '../server/lesson';
+import { narrationLength, type Action } from '../shared/contracts';
+it('fixture selects another local catalog model and fails explicitly if none exists', async () => {
+  const runtime = await createRuntime('fixture');
+  const preferred = vi.spyOn(runtime, 'getModel').mockReturnValue(undefined);
+  const session = await createTeacher(runtime, [], 'fixture', await sampleMaterial());
+  expect(session.model).toBeDefined(); session.dispose();
+  const catalog = vi.spyOn(runtime, 'getModels').mockReturnValue([]);
+  await expect(createTeacher(runtime, [], 'fixture', await sampleMaterial())).rejects.toThrow('離線');
+  preferred.mockRestore(); catalog.mockRestore();
+});
+it('bounded stop detaches a hung Pi session and late completion cannot mutate resumed lesson', async () => {
+  const runtime = await createRuntime('fixture');
+  const l = new Lesson(await sampleMaterial(), runtime, 'fixture', 45000, { stopWaitMs: 30, tokenBudget: 1000000 });
+  const act = (name: Action['action'], extra = {}) => l.action({ requestId: randomUUID(), revision: l.state.revision, action: name, ...extra });
+  await act('start'); await l.settled();
+  const session = (l as unknown as { session: AgentSession }).session;
+  const original = session.agent.streamFunction;
+  let release!: () => void;
+  let entered!: () => void;
+  const reached = new Promise<void>(r => { entered = r; });
+  const gate = new Promise<void>(r => { release = r; });
+  session.agent.streamFunction = async (...args) => { entered(); await gate; return original(...args); };
+  await act('ack', { beatId: l.state.activeBeatId, cursor: narrationLength(l.state.beats[0]) });
+  await act('next'); await reached;
+  const start = Date.now(); await act('pause'); expect(Date.now() - start).toBeLessThan(500);
+  await act('resume'); await l.settled();
+  const before = structuredClone(l.state.beats); release();
+  await new Promise(r => setTimeout(r, 300)); expect(l.state.beats).toEqual(before); expect(l.state.error).toBeNull();
+  await l.dispose();
+});

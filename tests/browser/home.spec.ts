@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('home expanded/collapsed is one page, main content recenters, and navigation is real', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1050 }); await page.goto('/');
   await expect(page.getByTestId('home-view')).toBeVisible(); await expect(page.getByTestId('classroom-view')).toHaveCount(0);
@@ -73,4 +73,36 @@ test('mobile home navigation opens/closes and composer remains within viewport',
   await page.getByLabel('上傳教材').setInputFiles({ name: '1234567890123456789012345678901234567890.md', mimeType: 'text/markdown', buffer: Buffer.from('這是一份學習教材，需要至少四十個字，目的是驗證手機上的長檔名附件仍然可讀，不會造成整個畫面水平溢出。') });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: 'docs/evidence/home-mobile-functional.png', fullPage: true });
+});
+test('refresh restores server checkpoint and question refers to pre-refresh board', async ({ page }) => {
+  await page.goto('/'); await page.getByRole('button', { name: /從零理解 TypeScript/ }).click();
+  await page.getByRole('button', { name: '開始這一小節' }).click();
+  await expect.poll(async () => (await page.getByTestId('narration').textContent())?.length ?? 0).toBeGreaterThan(15);
+  await page.getByRole('button', { name: '暫停', exact: true }).click();
+  const text = await page.getByTestId('narration').textContent();
+  const id = await page.getByTestId('board-beat').getAttribute('data-beat-id');
+  await page.reload();
+  await expect(page.getByTestId('classroom-view')).toBeVisible();
+  await expect(page.getByTestId('board-beat')).toHaveAttribute('data-beat-id', id!);
+  await expect(page.getByTestId('narration')).toHaveText(text!);
+  await page.getByRole('button', { name: '這裡不懂，換個方式說' }).click();
+  await page.getByLabel('書寫速度').selectOption('12');
+  await expect(page.getByTestId('board-beat')).toHaveCount(2);
+  await expect(page.getByTestId('narration').nth(1)).toContainText(text!);
+  await page.getByRole('button', { name: '接著剛才的位置' }).click();
+  await expect.poll(async () => (await page.getByTestId('narration').first().textContent())!.length).toBeGreaterThan(text!.length);
+});
+test('refresh while writing restores last acknowledged progress without trusting local board data', async ({ page }) => {
+  await page.goto('/'); await page.getByRole('button', { name: /從零理解 TypeScript/ }).click();
+  await page.getByRole('button', { name: '開始這一小節' }).click();
+  await expect.poll(async () => (await page.getByTestId('narration').textContent())?.length ?? 0).toBeGreaterThan(20);
+  const id = await page.getByTestId('board-beat').getAttribute('data-beat-id');
+  const before = (await page.getByTestId('narration').textContent())!.length;
+  await page.evaluate(() => localStorage.setItem('mag.progress', JSON.stringify({ cursor: 9999, narration: '偽造課程' })));
+  await page.reload();
+  await expect(page.getByTestId('board-beat')).toHaveAttribute('data-beat-id', id!);
+  await expect(page.getByRole('button', { name: '接著剛才的位置' })).toBeVisible();
+  const after = (await page.getByTestId('narration').textContent())!.length;
+  expect(after).toBeGreaterThanOrEqual(before - 6);
+  await expect(page.getByTestId('board-beat')).not.toContainText('偽造課程');
 });

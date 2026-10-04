@@ -80,3 +80,21 @@ it('offline fixture preserves citation ranges for valid short-line materials', a
   const l = new Lesson(material, runtime, 'fixture'); created.push(l); await start(l);
   expect(l.state.beats[0].citations[0].end).toBe(10);
 });
+it('preserves known cursor when pause omits or names an old beat', async () => {
+  const l = await lesson(); await start(l); const id = l.state.activeBeatId;
+  await action(l, 'pause', { beatId: id, cursor: 8 }); await action(l, 'resume');
+  await action(l, 'pause', { cursor: 99 }); expect(l.state.beats[0].cursor).toBe(8);
+  await action(l, 'resume'); await action(l, 'pause', { beatId: 'stale-id', cursor: 100 });
+  await action(l, 'resume'); expect(l.state.beats[0].cursor).toBe(8); expect(l.state.activeBeatId).toBe(id);
+});
+it('enforces configurable beat limit without duplicating committed content', async () => {
+  const l = new Lesson(await sampleMaterial(), runtime, 'fixture', 45000, { maxBeats: 1 }); created.push(l);
+  await start(l); await action(l, 'ask', { question: '再說一次', beatId: l.state.activeBeatId, cursor: 5 }); await l.settled();
+  expect(l.state.status).toBe('error'); expect(l.state.error).toContain('1 個片段'); expect(l.state.beats).toHaveLength(1);
+});
+it('rejects a small token budget before model dispatch and bounds retries', async () => {
+  const l = new Lesson(await sampleMaterial(), runtime, 'fixture', 45000, { tokenBudget: 10 }); created.push(l);
+  await action(l, 'start'); await l.settled();
+  expect(l.state.error).toContain('預算'); expect(l.state.beats).toHaveLength(0);
+  await action(l, 'retry'); await l.settled(); expect(l.state.beats).toHaveLength(0);
+});

@@ -45,3 +45,25 @@ it('keeps learner goals separate from quoted source text and its fingerprint', a
   expect(a.text).toBe(b.text);
   expect(() => importMaterial({ name: '筆記', origin: 'paste', text: '有效教材'.repeat(20), learningGoal: 'x'.repeat(501) })).toThrow();
 });
+
+it('accepts only bounded typography equivalents within the cited lines', () => {
+  const m = importMaterial({ name: '來源', origin: 'paste', text: '這是來源說明：型別（string）是文字，不能變成數字。\n這行有不同的概念，引用時必須使用正確的行號。' });
+  expect(() => verifyCitations(m, [{ start: 1, end: 1, quote: '型別(string) 是文字,不能變成數字。' }])).not.toThrow();
+  expect(() => verifyCitations(m, [{ start: 2, end: 2, quote: '型別（string）是文字' }])).toThrow(/L2.*這行/);
+  expect(() => verifyCitations(m, [{ start: 1, end: 1, quote: '型別（number）是文字' }])).toThrow(/L1/);
+  expect(() => verifyCitations(m, [{ start: 0, end: 1, quote: '型別' }])).toThrow();
+});
+it('requires short narration and unambiguous ordered flow anchors', async () => {
+  const b = { step: 0, narration: '先輸入，然後檢查，接著轉換，最後輸出。', visual: { kind: 'flow', nodes: ['輸入', '檢查', '轉換', '輸出'], anchors: ['輸入', '檢查', '轉換', '輸出'] }, citations: [{ start: 1, end: 1, quote: '來源' }] };
+  expect(beatSchema.safeParse({ ...b, narration: '字'.repeat(200), visual: { kind: 'text', text: '文字' } }).success).toBe(true);
+  expect(beatSchema.safeParse({ ...b, narration: '字'.repeat(201), visual: { kind: 'text', text: '文字' } }).success).toBe(false);
+  expect(beatSchema.safeParse(b).success).toBe(true);
+  const { visibleVisual } = await import('../shared/contracts');
+  expect(visibleVisual({ ...beatSchema.parse(b), id: 'flow', kind: 'lesson', cursor: 8 })).toEqual({ kind: 'flow', nodes: ['輸入', '檢查'] });
+  expect(beatSchema.safeParse({ ...b, narration: b.narration + '再次輸入' }).success).toBe(false);
+  expect(beatSchema.safeParse({ ...b, visual: { ...b.visual, anchors: ['不存在'] } }).success).toBe(false);
+});
+it('reports actual material bytes and line counts', () => {
+  expect(() => importMaterial({ name: 'big.txt', origin: 'upload', text: '中'.repeat(22000) })).toThrow(/66000.*65536/);
+  expect(() => importMaterial({ name: 'lines.txt', origin: 'upload', text: Array(801).fill('文字').join('\n') })).toThrow(/801.*800/);
+});

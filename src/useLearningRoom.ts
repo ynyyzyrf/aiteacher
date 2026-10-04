@@ -4,7 +4,7 @@ export type Health = { mode: 'live' | 'fixture'; modelAvailable: boolean; messag
 export async function api<T>(url: string, body?: unknown, method = 'POST'): Promise<T> {
   const res = await fetch(url, body === undefined ? undefined : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? '連線失敗，請再試一次。');
+  if (!res.ok) throw Object.assign(new Error(data.error ?? '連線失敗，請再試一次。'), { status: res.status });
   return data as T;
 }
 export function useLearningRoom() {
@@ -29,9 +29,44 @@ export function useLearningRoom() {
   const apply = useCallback((next: LessonView) => {
     if (current.current?.id === next.id && current.current.revision > next.revision) return;
     current.current = next; setLesson(next);
+    try { sessionStorage.setItem('mag.lesson', next.id); } catch { /* Storage may be disabled; current tab still works. */ }
   }, []);
   const cancelSpeech = useCallback(() => { window.speechSynthesis?.cancel(); spoken.current = null; }, []);
   useEffect(() => { void api<Health>('/api/health').then(setHealth).catch(e => setError(e.message)); return cancelSpeech; }, [cancelSpeech]);
+  useEffect(() => {
+    let cancelled = false;
+    let id: string | null = null;
+    try { id = sessionStorage.getItem('mag.lesson'); } catch { return; }
+    if (!id || !/^[a-f0-9-]{36}$/.test(id)) return;
+    busyRef.current = true; setBusy(true);
+    void api<LessonView>(`/api/lessons/${id}`).then(async state => {
+      if (cancelled) return;
+      const restored = ['playing', 'generating', 'clarifying'].includes(state.status)
+        ? await api<LessonView>(`/api/lessons/${id}/actions`, { action: 'pause', requestId: crypto.randomUUID(), revision: state.revision }) : state;
+      if (cancelled) return;
+      locallyPaused.current = true; apply(restored); setView('classroom');
+    }).catch(e => { if (!cancelled) { setError(e.message); if (e.status === 404) { try { sessionStorage.removeItem('mag.lesson'); } catch { /* optional browser storage */ } } } })
+      .finally(() => { if (!cancelled) { busyRef.current = false; setBusy(false); } });
+    return () => { cancelled = true; };
+  }, [apply]);
+  useEffect(() => {
+    if (!lesson?.id) return;
+    const checkpoint = (leaving = false) => {
+      const state = current.current;
+      if (!state?.activeBeatId) return;
+      const cursor = progressRef.current[state.activeBeatId] ?? state.beats.find(b => b.id === state.activeBeatId)?.cursor ?? 0;
+      const body = { action: 'checkpoint', requestId: crypto.randomUUID(), revision: state.revision, beatId: state.activeBeatId, cursor };
+      if (leaving) {
+        navigator.sendBeacon(`/api/lessons/${state.id}/actions`, new Blob([JSON.stringify(body)], { type: 'application/json' }));
+      } else if (!busyRef.current && cursor > (state.beats.find(b => b.id === state.activeBeatId)?.cursor ?? 0)) {
+        void api<LessonView>(`/api/lessons/${state.id}/actions`, body).then(next => { if (current.current?.id === state.id) apply(next); }).catch(() => { /* Regular polling reports transport failures. */ });
+      }
+    };
+    const timer = window.setInterval(() => checkpoint(), 250);
+    const leaving = () => { cancelSpeech(); checkpoint(true); };
+    window.addEventListener('pagehide', leaving);
+    return () => { clearInterval(timer); window.removeEventListener('pagehide', leaving); };
+  }, [lesson?.id, apply, cancelSpeech]);
   useEffect(() => {
     if (!lesson?.id) return;
     const id = lesson.id;

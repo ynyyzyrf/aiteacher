@@ -10,9 +10,11 @@ export function importMaterial(input: unknown): Material {
   const { name, origin } = parsed.data;
   if (origin === 'upload' && !/\.(md|txt)$/i.test(name)) throw new InputError('目前支援 .txt 與 .md；PDF、圖片與網址擷取尚未支援。');
   const text = parsed.data.text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim();
-  if (text.length < 40 || Buffer.byteLength(text, 'utf8') > 65536 || Array.from(text).some(c => (c.charCodeAt(0) < 32 && c !== '\n' && c !== '\t') || c === '\ufffd')) throw new InputError('請提供 40 字以上、64 KB 以下的有效 UTF-8 文字教材。');
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (bytes > 65536) throw new InputError(`教材為 ${bytes} bytes，上限 65536 bytes（64 KB）。`);
+  if (text.length < 40 || Array.from(text).some(c => (c.charCodeAt(0) < 32 && c !== '\n' && c !== '\t') || c === '\ufffd')) throw new InputError('請提供 40 字以上、64 KB 以下的有效 UTF-8 文字教材。');
   const lines = text.split('\n');
-  if (lines.length > 800) throw new InputError('教材最多 800 行，請先選取想學的一小節。');
+  if (lines.length > 800) throw new InputError(`教材為 ${lines.length} 行，上限 800 行，請先選取想學的一小節。`);
   return { id: randomUUID(), name, text, lines, sha256: createHash('sha256').update(text).digest('hex'), importedAt: new Date().toISOString(), origin, learningGoal: parsed.data.learningGoal, sources: [] };
 }
 export async function sampleMaterial(learningGoal = ''): Promise<Material> {
@@ -23,10 +25,18 @@ export async function sampleMaterial(learningGoal = ''): Promise<Material> {
     { title: 'The Basics', url: 'https://www.typescriptlang.org/docs/handbook/2/basic-types.html' },
   ] };
 }
+// Deliberately not NFKC: do not fold mathematical symbols, ligatures or words.
+function typography(text: string) {
+  return text.replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/[\s\u3000]+/g, ' ').replace(/ *([(),:;!?]) */g, '$1').trim();
+}
 export function verifyCitations(material: Material, citations: Citation[]) {
   for (const ref of citations) {
-    if (ref.end < ref.start || ref.end > material.lines.length || ref.end - ref.start > 10 || !material.lines.slice(ref.start - 1, ref.end).join('\n').includes(ref.quote)) {
-      throw new InputError('來源引用未通過核對：行號與引文必須與教材一致。');
+    const rangeValid = Number.isInteger(ref.start) && Number.isInteger(ref.end) && ref.start >= 1 && ref.end >= ref.start && ref.end <= material.lines.length && ref.end - ref.start <= 10;
+    const source = rangeValid ? material.lines.slice(ref.start - 1, ref.end).join('\n') : '';
+    if (!rangeValid || (!source.includes(ref.quote) && (!typography(ref.quote) || !typography(source).includes(typography(ref.quote))))) {
+      const excerpt = source.slice(0, 70).replace(/[\r\n\t]/g, ' ');
+      throw new InputError(`來源引用未通過核對：L${ref.start}–L${ref.end}。${rangeValid ? `該範圍原文：「${excerpt}」。` : `有效行號為 L1–L${material.lines.length}。`}請使用該範圍原文，不可更換字詞。`);
     }
   }
 }

@@ -6,17 +6,17 @@ import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-s
 import type { Material } from '../shared/contracts.js';
 export function fixtureStream(material: Material): Agent['streamFunction'] {
   const excerpts = material.lines.map((text, i) => ({ text, line: i + 1 })).filter(l => l.text.length >= 2 && !l.text.startsWith('#') && !l.text.includes('https://')).slice(0, 3);
-  const refs = excerpts.map(e => ({ start: e.line, end: e.line, quote: e.text.slice(0, 180) }));
-  if (!refs.length) refs.push({ start: 1, end: Math.min(10, material.lines.length), quote: material.lines.slice(0, 10).join('\n').slice(0, 180) });
+  const refs = excerpts.map(e => ({ start: e.line, end: e.line, quote: e.text.slice(0, 150) }));
+  if (!refs.length) refs.push({ start: 1, end: Math.min(10, material.lines.length), quote: material.lines.slice(0, 10).join('\n').slice(0, 150) });
   if (refs.length < 2) refs.push(refs[0]);
   return (model, context, options) => {
     const stream = new AssistantMessageEventStream();
     const lastUser = context.messages.findLast(m => m.role === 'user');
     const text = lastUser && Array.isArray(lastUser.content) ? lastUser.content.filter(c => c.type === 'text').map(c => c.text).join('') : '';
-    const command = JSON.parse(text || '{}') as { step?: number; intent?: string; context?: { narration?: string } };
+    const command = JSON.parse(text || '{}') as { step?: number; intent?: string; plan?: unknown; context?: { narration?: string } };
     const step = command.step ?? 0;
     const index = Math.min(step, refs.length - 1);
-    const hasPlan = context.messages.some(m => m.role === 'toolResult' && m.toolName === 'plan_lesson' && !m.isError);
+    const hasPlan = !!command.plan || context.messages.some(m => m.role === 'toolResult' && m.toolName === 'plan_lesson' && !m.isError);
     const afterUser = context.messages.slice(context.messages.lastIndexOf(lastUser!)+1);
     const beatDone = afterUser.some(m => m.role === 'toolResult' && m.toolName === 'board_beat' && !m.isError);
     const call: ToolCall | undefined = !hasPlan ? { type: 'toolCall', id: crypto.randomUUID(), name: 'plan_lesson', arguments: {

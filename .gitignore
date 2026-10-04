@@ -6,3 +6,5 @@ dist/
 .pi-local/
 test-results/
 playwright-report/
+
+.mag-lessons/

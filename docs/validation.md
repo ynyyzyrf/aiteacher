@@ -1,60 +1,46 @@
-# Executed validation — 2026-10-04
+# 驗證紀錄 — 2026-10-04 評審修訂
 
-Repository: `/workspace/aiteacher` → `https://github.com/ynyyzyrf/aiteacher.git`, branch `work` (unborn / no commits). Initially empty; no existing application or local instructions/skills were present. All deliverables are new working-tree files; no push, PR or deployment.
+儲存庫：`https://github.com/ynyyzyrf/aiteacher`；分支：`delivery/mag-source-2026-10-04`。本次以 `7445d0ad92691560186c4dfeb493b3de135e619d` 為基礎，在獨立 delivery checkout 修改；原 `/workspace/aiteacher` 未提交內容保持原樣。沒有部署、合併、建立訂閱或變更憑證。
 
-## Current UI revision boundary
+## 評審核實與處理
 
-Reference-image fidelity is **BLOCKED**: actual pixels of the three user-selected Library references could not be materialized because of proxy HTTP 403. No visual-matching claim is made. Independent functional changes were completed in the existing repository; detailed status is in `../design-qa.md`. New screenshots show the implemented functional checkpoint, not a verified match to the references.
+| 項目 | 核實結果與修改 |
+| --- | --- |
+| P1 重新整理進度 | 原先瀏覽器不保留課程 ID、伺服器只有記憶體。現在將教材、計畫、白板、已確認游標、提問、去重 ID 與預算保存至伺服器本機 JSON；分頁只存 ID。載入時驗證結構、來源指紋及引用，恢復成暫停狀態。新的 Pi session 收到已提交、來源可核對的可見歷史摘要。 |
+| P1 引用核對 | 原本只有 exact includes。保留精確優先，再有限度折疊空白、全形 ASCII 與指定標點旁空白；不做語意近似或一般 NFKC。錯行、改字依然拒絕，回報行號及該範圍短原文。供應商原始錯誤仍不公開。 |
+| P1 暫停游標 | 伺服器不能知道未傳送的畫面進度。**不採用**把未知／過期 beatId 的 cursor 套到 activeBeat 的建議；保留最後可信 checkpoint。新增約 250ms 的進度送出與離頁 best-effort 保存，正確 ID 才更新，且不倒退。 |
+| P2 講解長度 | schema 從 360 降為 200，提示建議 60–160；超長拒絕並要求拆分，不截斷模型講解。離線來源片段縮短以符合這個界線。 |
+| P2 流程圖錨點 | 可選 anchors，必須與節點等長、在 narration 中唯一且按順序出現；講到錨點結尾才顯示。無 anchors 保留原比例機制。 |
+| P2 用量限制 | 每次 Pi stream dispatch 前預留序列化輸入 UTF-8 bytes + 最多 2048 output tokens + 1024 緩衝。成功、失敗、取消、重試及工具後續回合均受限制。回報 tokens 另存，超過預留時追加；不足預留不退款。預設 200000，可設定；80% 提示，下一次額度不足拒絕生成。是保守估算，**不是精確 token 或金額上限**。 |
+| P2 語音說明 | MVP 明確為朗讀目前片段，打斷時停止。單次收音仍是實驗橋接；全雙工及逐字聲音／白板同步未實作。 |
+| P3 設計基準 | **仍 BLOCKED**。先前 Library 參考圖代理 403，依指示未重試或繞過。沒有依文字猜測宣稱還原 Demo；首頁保留現有獨立結構，詳見 `design-qa.md`。 |
+| P3 其他 | `MAG_MAX_BEATS` 預設 80；fixture 優先模型失效時使用相容本機目錄，沒有相容項目就明確失敗，不呼叫 live。stop 最多等約 5 秒，隔離並 dispose 舊 session；晚到工具被工作階段代次與 epoch 擋住，最終完成時再清理。最多容許兩個仍卡住的舊工作，再多會停止新增生成。匯入錯誤顯示實際 bytes／行數。 |
 
-## Results
+## 本次執行結果
 
-| Check | Executed result | Boundary |
-| --- | --- | --- |
-| `npm ci` | PASS, 366 packages installed from lockfile | Node 24.19.0 / npm 11.9.0 in configured executor |
-| `npm run typecheck` | PASS | Includes official Pi SDK and custom tool signatures |
-| `npm run lint` | PASS | ESLint / TypeScript rules |
-| `npm test` | PASS, 23 tests across 3 files | Real Pi loop with deterministic model fixture; material, state and HTTP tests |
-| `npm run build` | PASS | Production Vite assets, no external font fetch needed |
-| `npm run test:browser` | PASS, 12 Chromium tests | Real rendered UI and HTTP server; model explicitly mocked |
-| Production live startup | PASS | Browser loads built assets, imports sample, displays precise missing-model error; zero board beats and no page errors |
-| Production fixture startup | PASS | Built assets run full Pi tool loop and show board; no Vite client in production |
-| `npm run check:pi` | BLOCKED as expected, exit 2 | **0 available live models; no live model request made** |
-| `MAG_MODE=fixture npm run check:pi` | PASS | `plan_lesson` and `board_beat` executed through Pi; only those tools active; **mock model output** |
-| Live teaching accuracy | NOT RUN | Requires existing authorized model credential |
-| Actual microphone / audible playback | NOT VERIFIED | No physical microphone or live recognition/audio verification; API doubles only |
-| Full-duplex realtime voice / audio word alignment | NOT IMPLEMENTED | Browser half-duplex experiment; board and speech clocks are separate |
+- Node 24.19、npm 11.9，`npm ci` 安裝鎖定的 366 個套件。
+- `npm run typecheck`、`npm run lint`、`npm run build`：PASS；`npm test`：PASS，6 個測試檔、36 個案例。
+- `MAG_MODE=fixture npm run check:pi`：PASS，實際執行 plan_lesson／board_beat，只有這兩個工具啟用。`MAG_MODE=live npm run check:pi`：預期阻擋、exit 2，0 個可用模型，未發出模型請求。
+- 單元／API／真實 Pi SDK + 離線模型測試包括：原有 23 個案例，以及引用排版、錯行／錯字、200 字邊界、唯一錨點與第二概念顯示兩節點、實際匯入限制數值、預算80%／耗盡／失敗重試／供應商較大用量、缺少或過期片段 ID、maxBeats、磁碟還原與損壞引用拒絕、fixture 模型選擇、卡住工作停止與晚到結果隔離。
+- Chromium 回歸：PASS，共 14 個案例；使用臨時 Playwright 設定指向最新 production 服務 `127.0.0.1:5175` 和 `/usr/bin/chromium`（沒有更改預設測試埠設定）。包含新增的暫停後重新整理／情境提問／接續，以及書寫途中重新整理／不採信偽造 localStorage。其餘包括首頁收合、真正教材上傳、學習目標、重複點擊、上一頁回看、手機版、網路失敗、語音橋接與白板渲染。
+- 語音瀏覽器測試使用 API doubles；程式碼／SVG 渲染案例使用注入的白板 fixture。沒有把這些結果當成實際聲音或模型繪圖品質的證據。
+- 額外真實瀏覽器檢查：將後端課程預算設為 10，開始／重試均顯示「用量預算不足」，白板為零、無 page errors；沒有注入假 API 回應。
+- 正式啟動核對 HTML 與 `dist/index.html` byte-equal。一次中途切換服務的回歸出現 1 個逾時；排除仍佔用埠的舊開發子程序，清理獨立測試資料後重跑通過。瀏覽器 fixture 現在會刪除自身建立的課程，避免反覆執行累積至20堂上限。
+- 初次新增測試確實暴露既有不支援功能（引用、長度、匯入數值、beat 限制、預算、fixture 目錄、重新整理），修正後重跑。開發中曾有 timeout 狀態更新時序失敗與測試用 TranscriptContext 型別錯誤，已修正；不隱藏失敗後直接宣稱通過。
 
-## Tested behavior
+## 資料保留與恢復界線
 
-UI revision adds verified home expanded/collapsed state and recentering, real navigation, learning-goal transmission, integrated file/paste material entry, double-click deduplication, meaningful sample prompts, home-to-classroom and return transitions, pause-before-home, same-beat continuation, previous-step review without progress mutation, and mobile navigation/long-filename overflow checks. All prior teaching/voice/renderer checks still run with the new UI.
+預設 `.mag-lessons/`，可用 `MAG_DATA_DIR` 指定。教材全文、提問與進度保留在執行服務的電腦；以 private directory/file mode 建立且排除 Git。沒有保存供應商憑證或完整模型內部對話。原子 rename 防止一般寫入中斷產生半份 JSON；不宣稱磁碟損毀／斷電下的完整交易保證。
 
+伺服器啟動清理超過一小時的有效存檔；下一次匯入清理記憶體中閒置一小時的課程。讀取中的課程會定期更新活動時間。換教材會刪除前一堂；損壞或不相容檔案不載入，損壞檔保留供本機人工清理。上限20個同時載入課程。關閉服務後可刪除自己設定的資料目錄立即清除。
 
-- Genuine arbitrary Markdown/text import over HTTP and browser file upload; Traditional Chinese, Unicode, CRLF normalization, line count, SHA-256 and origin.
-- Empty, invalid-format, binary/control-character, oversized and excessive-line materials; malformed JSON, cross-origin mutation and missing sessions.
-- Exact source quotes and line ranges; bounded plan/narration/visual schemas. Imported HTML-like source stays literal text and never executes.
-- Pi itself creates the plan and invokes tools in the fixture run. Custom resource loader and active-tool check prove no coding tools are enabled.
-- Narration and board use the same character cursor and projection. Code and SVG flow renderer checked in Chromium with an explicitly injected visual fixture (not live model drawing).
-- Interruption freezes the original displayed content, aborts Pi, adds a clarification, leaves the step unchanged, then resumes the original beat/cursor. Repeated questions preserve the original resume checkpoint.
-- Repeated request IDs, stale revision and late playback acknowledgments do not double-advance. Generation canceled while moving to the next step does not skip that step. Completion stays inside plan bounds.
-- A discovered cancellation race during Pi's async prompt preflight was fixed by invalidating epochs and canceling again at `agent_start`. Regression test covers it.
-- Bounded generation timeout, visible retry state, no late tool mutation after abort. No automatic switch from live to fixture.
-- Real browser network failure stops writing. Mobile 390px layout has no horizontal overflow; sidebar question entry remains usable.
-- Voice API doubles verify opt-in speech playback, cancellation before mic capture, one final transcript submitted once, and microphone-denial fallback. This is wiring evidence, not real speech quality or live audio evidence.
-- Development-server HMR ports are separate per app port; the discovered two-preview port collision was fixed. Final browser suite had no application page errors.
+sessionStorage 的課程 ID 僅供同一分頁找回進度，不是帳號系統。只支援可信本機單人環境。前端可能在最後一次成功 checkpoint 後仍多顯示幾個字；突然中斷只能還原伺服器確知位置，不猜測未收到的游標。live/fixture 資料分模式載入，不互相假扮。恢復的是已提交內容與摘要，不是模型完整內部狀態；真實模型的接續品質尚待驗證。
 
-## View evidence
+## 尚未驗證／阻礙
 
-- [Desktop import](evidence/import-desktop.png)
-- [Interrupted lesson and clarification](evidence/clarification-desktop.png)
-- [Mobile](evidence/mobile.png)
-- [Live-mode credential blocker](evidence/live-model-blocker.png)
+- 沒有已授權可用的 live 模型；**未發出付費模型驗證請求**。SDK、工具和介面通過不代表真實教學正確性。接上既有受保護憑證後，需再評估弱 JS 學習者的理解、引用含義、圖文對齊與重啟後問答品質。
+- 真實麥克風、可聽播放、語音服務品質未驗證。全雙工與逐字音訊同步未實作。
+- 參考圖像素不可讀，視覺保真仍阻擋，沒有重新下載或走替代繞過路徑。
+- 僅本機 loopback 啟動，無已確認的使用者可開啟公開預覽，未部署。
 
-All successful lesson screenshots use the visible **離線互動測試** banner. The sample citations were reviewed against official TypeScript docs (see [reuse/provenance record](reuse.md)); exact quote checks do not prove a future model's explanation is logically entailed by them.
-
-## Smallest remaining blocker and next verification
-
-Set an **existing** authorized provider secret in this executor's secure environment settings, e.g. `ANTHROPIC_API_KEY`, with `PI_PROVIDER=anthropic`, `PI_MODEL=claude-sonnet-4-5`, `MAG_MODE=live`; restart. No secret should be sent in chat. No credentials, subscription or account/security settings were changed here. Run `npm run check:pi`, then repeat the browser scenario on live mode and assess explanation correctness, weak-JS pacing, citation entailment, code/diagram alignment and context-sensitive clarification. Real microphone/playback then needs a capable browser, explicit permission and human audio inspection; full realtime audio is a further integration.
-
-## Known slice limits
-
-No durable progress, authentication/multiuser deployment, PDF/OCR/URL import, learned mastery, code execution, avatar or general whiteboard editor. Sessions stay in process memory, capped at 20; reload does not restore learner UI. Quotes are mechanically checked, semantic truth is not. Model generation can still fail or give low-quality teaching, and the UI reports failure instead of inventing success. Local loopback preview only; no public hosting was authorized or performed.
+Pi／Mentora 選型與 MIT 來源見 [reuse.md](reuse.md)（初次評估歷史紀錄）；本次仍只使用 Pi 教學核心，Mentora 僅保留既有箭頭工具重用。
